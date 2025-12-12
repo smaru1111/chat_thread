@@ -19,7 +19,7 @@
 ┌─────────────────────────────────────────┐
 │  フロントエンド + バックエンド           │
 │  Remix (React) + TypeScript             │
-│  └─ Cloudflare Pages (ホスティング)     │
+│  └─ Vercel (ホスティング)               │
 ├─────────────────────────────────────────┤
 │  データベース                            │
 │  PostgreSQL (Supabase)                  │
@@ -29,7 +29,7 @@
 │  Remix Auth                              │
 ├─────────────────────────────────────────┤
 │  CI/CD                                   │
-│  Cloudflare Pages (自動デプロイ)        │
+│  Vercel (自動デプロイ)                   │
 │  + GitHub Actions (テスト/Lint)         │
 └─────────────────────────────────────────┘
 ```
@@ -47,10 +47,10 @@
    - Loader/Actionパターンによるデータフェッチングが効率的
    - サーバーサイドとクライアントサイドの境界が明確
 
-2. **Cloudflare Pagesとの相性**
-   - RemixはCloudflare Workersランタイムをサポート
-   - エッジデプロイメントによるグローバルな高速化
-   - Cloudflare Pagesの自動デプロイとシームレスに統合
+2. **Vercelとの相性**
+   - RemixはVercelで公式サポート
+   - Node.jsランタイムでPrismaがそのまま動作
+   - Vercelの自動デプロイとシームレスに統合
 
 3. **パフォーマンス**
    - データローディングの最適化（Loaderによる並列フェッチ）
@@ -76,39 +76,45 @@
 
 ## ☁️ ホスティング
 
-### Cloudflare Pages
+### Vercel
 
 **選定理由**：
 
 1. **Remixとの統合**
-   - Remixの公式サポート（Cloudflare Workersアダプター）
-   - エッジデプロイメントによる低レイテンシ
-   - グローバルCDNによる高速配信
+   - Remixの公式サポート（自動検出・最適化）
+   - Node.jsランタイムでPrismaがそのまま動作
+   - サーバーレス関数として自動デプロイ
 
 2. **デプロイの簡単さ**
    - GitHub連携による自動デプロイ（設定が簡単）
    - プレビューデプロイの自動生成（PRごと）
-   - 環境変数の管理が直感的
+   - 環境変数の管理が直感的（ダッシュボード + CLI）
 
 3. **コスト効率**
    - 無料枠が充実（小規模利用には十分）
-   - 従量課金が明確
+   - 従量課金が明確（Hobbyプランで十分）
    - 予期しない課金のリスクが低い
 
 4. **パフォーマンス**
-   - エッジコンピューティング（Cloudflare Workers）
-   - グローバルに分散されたインフラ
-   - DDoS保護などのセキュリティ機能が標準装備
+   - グローバルCDNによる高速配信
+   - エッジネットワークによる低レイテンシ
+   - 自動的な最適化（画像最適化、圧縮等）
 
 5. **CI/CDの統合**
-   - GitHub Actionsとの連携が簡単
+   - GitHub連携による自動デプロイ
    - デプロイログの確認が容易
    - ロールバック機能
+   - 環境ごとの設定（Production/Preview/Development）
+
+6. **Prismaとの相性**
+   - Node.jsランタイムでPrisma Clientがそのまま動作
+   - データベース接続プーリングが利用可能
+   - マイグレーション実行が容易
 
 **設定**：
-- ビルドコマンド: `npm run build`
-- ビルド出力ディレクトリ: `.output`
-- Node.jsバージョン: 18.x または 20.x
+- ビルドコマンド: `npm run build`（自動検出）
+- フレームワーク: Remix（自動検出）
+- Node.jsバージョン: 18.x または 20.x（自動検出）
 
 ---
 
@@ -313,15 +319,16 @@
 
 ## 🚀 CI/CD
 
-### Cloudflare Pages自動デプロイ + GitHub Actions
+### Vercel自動デプロイ + GitHub Actions
 
 **選定理由**：
 
-1. **Cloudflare Pages自動デプロイ**
-   - GitHub連携による自動デプロイ
+1. **Vercel自動デプロイ**
+   - GitHub連携による自動デプロイ（設定不要）
    - PRごとのプレビューデプロイ
    - ロールバック機能
    - デプロイログの確認
+   - 環境ごとの設定（Production/Preview/Development）
 
 2. **GitHub Actions**
    - テストとLintの自動実行
@@ -340,16 +347,21 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
+        with:
+          node-version: '20'
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test
 ```
 
-**Cloudflare Pages設定**：
-- ビルドコマンド: `npm run build`
-- ビルド出力: `.output`
-- 環境変数: Cloudflare Pagesダッシュボードで管理
+**Vercel設定**：
+- ビルドコマンド: `npm run build`（自動検出）
+- フレームワーク: Remix（自動検出）
+- 環境変数: Vercelダッシュボードで管理
+  - Production環境
+  - Preview環境
+  - Development環境（ローカル開発用）
 
 ---
 
@@ -387,14 +399,14 @@ jobs:
 
 ## 📊 監視・ログ
 
-### Cloudflare Analytics（初期）
+### Vercel Analytics（初期）
 
 **選定理由**：
 
 1. **統合性**
-   - Cloudflare Pagesと統合
+   - Vercelと統合
    - 追加設定が不要
-   - 基本的なメトリクスが取得可能
+   - 基本的なメトリクスが取得可能（Web Vitals等）
 
 2. **コスト**
    - 無料枠で基本的な監視が可能
@@ -413,10 +425,10 @@ jobs:
 
 **選定理由**：
 
-1. **Cloudflare Pages**
-   - 環境変数の管理が簡単
+1. **Vercel**
+   - 環境変数の管理が簡単（ダッシュボード + CLI）
    - 暗号化された保存
-   - 環境ごとの設定が可能
+   - 環境ごとの設定が可能（Production/Preview/Development）
 
 2. **開発環境**
    - `.env`ファイルによる管理
@@ -456,14 +468,14 @@ jobs:
 
 | カテゴリ | 技術 | 選定理由 |
 |---------|------|---------|
-| **フロントエンド** | Remix (React) | Cloudflare Pagesとの統合、統合型アーキテクチャ |
-| **ホスティング** | Cloudflare Pages | Remixサポート、エッジデプロイ、無料枠 |
+| **フロントエンド** | Remix (React) | Vercelとの統合、統合型アーキテクチャ |
+| **ホスティング** | Vercel | Remixサポート、Prisma動作、無料枠 |
 | **データベース** | PostgreSQL (Supabase) | マネージド、無料枠、簡単なセットアップ |
 | **ORM** | Prisma | 型安全性、マイグレーション管理 |
 | **認証** | Remix Auth | Remix公式、柔軟性 |
 | **スタイリング** | Tailwind CSS | デファクト、開発効率 |
 | **テスト** | Vitest | 高速、TypeScript統合 |
-| **CI/CD** | Cloudflare Pages + GitHub Actions | 自動デプロイ、テスト自動化 |
+| **CI/CD** | Vercel + GitHub Actions | 自動デプロイ、テスト自動化 |
 | **LLM API** | OpenAI API | デファクト、実装の簡単さ |
 
 ---
@@ -499,14 +511,68 @@ jobs:
 3. `npm run format:check`
 4. `npm run test`（将来的にE2Eを追加）
 
-### Cloudflare Pages との整合
-- Cloudflare Pagesのビルド前に `typecheck` / `lint` / `test` を通すため、PRでActionsを必須チェックに。
-- Pagesのビルドコマンドは `npm run build` を維持。
+### Vercel との整合
+- Vercelのビルド前に `typecheck` / `lint` / `test` を通すため、PRでActionsを必須チェックに。
+- Vercelのビルドコマンドは `npm run build` を維持（自動検出）。
 
 ### レビュー運用（推奨）
 - 小さなPRを推奨（UI/ロジック/DB変更は分割）
 - 変更点にはスクショまたは動作GIF（UI変更時）
 - API変更時は `05_api_design.md` を、モデル変更時は `03_models.md` を更新
+
+---
+
+## 🔧 Vercel環境変数の設定方法
+
+### 1. Vercelダッシュボードでの設定
+
+1. **Vercelダッシュボードにアクセス**
+   - https://vercel.com/dashboard にログイン
+   - プロジェクトを選択（または新規作成）
+
+2. **環境変数の追加**
+   - プロジェクトの「Settings」→「Environment Variables」を開く
+   - 「Add New」をクリック
+
+3. **必要な環境変数を追加**
+   - `DATABASE_URL`: PostgreSQL接続文字列（Supabaseから取得）
+   - `SUPABASE_URL`: SupabaseプロジェクトURL
+   - `SUPABASE_ANON_KEY`: Supabase anon公開キー
+   - `SESSION_SECRET`: セッション署名用のランダム文字列（`openssl rand -hex 32`で生成）
+   - `OPENAI_API_KEY`: OpenAI APIキー
+   - `GH_CLIENT_ID`: GitHub OAuth Client ID
+   - `GH_CLIENT_SECRET`: GitHub OAuth Client Secret
+
+4. **環境ごとの設定**
+   - Production: 本番環境用の値
+   - Preview: プレビュー環境用の値（PRごとに生成）
+   - Development: ローカル開発用の値（`.env`ファイルで管理）
+
+### 2. ローカル開発環境（`.env`ファイル）
+
+プロジェクトルートに `.env` ファイルを作成：
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require
+SUPABASE_URL=https://xxxxx.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOi...
+SESSION_SECRET=your-session-secret-here
+OPENAI_API_KEY=sk-...
+GH_CLIENT_ID=your-github-client-id
+GH_CLIENT_SECRET=your-github-client-secret
+```
+
+**注意**: `.env` ファイルは `.gitignore` に含まれているため、Gitにコミットされません。
+
+### 3. GitHub Secrets（CI/CD用）
+
+GitHub Actionsでテストを実行する場合、以下のシークレットを設定：
+
+1. リポジトリの「Settings」→「Secrets and variables」→「Actions」
+2. 「New repository secret」をクリック
+3. 上記の環境変数を追加（`DATABASE_URL`, `SUPABASE_URL`等）
+
+または、GitHub Environments（`dev`環境）を使用している場合は、その環境にシークレットを設定。
 
 ---
 
@@ -524,7 +590,7 @@ jobs:
 ## 📚 参考リンク
 
 - [Remix公式ドキュメント](https://remix.run/docs)
-- [Cloudflare Pagesドキュメント](https://developers.cloudflare.com/pages/)
+- [Vercel Remixドキュメント](https://vercel.com/docs/frameworks/remix)
 - [Supabaseドキュメント](https://supabase.com/docs)
 - [Prismaドキュメント](https://www.prisma.io/docs)
 - [Tailwind CSSドキュメント](https://tailwindcss.com/docs)
