@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  /// Supabase Auth の `auth.users.id`（UUID）と同一の値を格納する
+  id            String         @id @db.Uuid
+  displayName   String?
+  email         String?
+  githubUsername String?
+  createdAt     DateTime       @default(now())
+
+  conversations Conversation[]
+  messages      Message[]
+
+  @@index([createdAt])
+}
+
+model Conversation {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  title     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Message {
+  id             String    @id @default(uuid()) @db.Uuid
+  conversationId String    @db.Uuid
+  userId         String?   @db.Uuid
+
+  /// Adjacency List（親子関係）
+  parentMessageId String?  @db.Uuid
+
+  /// 補助カラム：ツリーの最上段メッセージID
+  threadRootId    String   @db.Uuid
+  depth           Int      @default(0)
+
+  role            String
+  content         String
+
+  createdAt       DateTime @default(now())
+  sequence        BigInt   @default(autoincrement())
+  metadata        Json?
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user            User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  parentMessage   Message?     @relation("MessageToChildren", fields: [parentMessageId], references: [id], onDelete: Cascade)
+  children        Message[]    @relation("MessageToChildren")
+
+  threadRoot      Message      @relation("ThreadRoot", fields: [threadRootId], references: [id], onDelete: Cascade)
+  threadDescendants Message[]  @relation("ThreadRoot")
+
+  @@index([conversationId, threadRootId, createdAt])
+  @@index([conversationId, parentMessageId, createdAt])
+  @@index([conversationId, depth, createdAt])
+}
