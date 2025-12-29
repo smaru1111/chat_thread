@@ -3,13 +3,13 @@
 ## 📋 概要
 
 このドキュメントは、`02_requirements.md` の要件を満たすための API 仕様を定義します。  
-Remix (React) + Cloudflare Pages + Supabase + Prisma 構成を前提とし、基本は JSON/HTTPS で設計します。
+Next.js（App Router） + Vercel + Supabase + Prisma 構成を前提とし、基本は JSON/HTTPS で設計します。
 
 ---
 
 ## 🔑 共通事項
 
-- **認証**: セッションCookieベース（Remix Auth）。例: `Cookie: session=...`
+- **認証**: Supabase Auth（GitHub OAuth）のセッションCookieベース（HttpOnly）。例: `Cookie: sb-...=...`
 - **Base URL**: `/api`
 - **Content-Type**: `application/json; charset=utf-8`
 - **エラーフォーマット（例）**:
@@ -138,33 +138,28 @@ Remix (React) + Cloudflare Pages + Supabase + Prisma 構成を前提とし、基
   2) OpenAI API へ送信（ストリーミング推奨）  
   3) 生成メッセージを `messages` に保存（parent = 対象ID）  
 - **Response 202 (ストリーミング開始)**:
-  - SSE または fetch-stream を想定（Cloudflare Workers対応）
+  - SSE または fetch-stream を想定（Vercel / Node.js Runtime）
 
 ---
 
 ## 🔐 認証・ユーザー
 
-### POST /api/auth/signup (メール/パスワード, Remix Auth + Supabase)
-- **目的**: ユーザー登録
-- **Body**: `{ "email": "...", "password": "..." }`
-- **処理**:
-  - Supabase Authでユーザー作成
-  - ローカルDB `users` に行を作成
-  - `auth_accounts` に `provider='supabase'`, `provider_user_id=<supabase_user_id>` を保存
-- **Response 201**: `{ "userId": "uuid" }`
-
-### POST /api/auth/login
-- **目的**: ログインしてセッションクッキーを発行
-- **Body**: `{ "email": "...", "password": "..." }`
-- **処理**:
-  - Supabase Authで認証
-  - ローカル`users` / `auth_accounts` と突合
-  - セッションCookieを発行（HttpOnly, Secure, SameSite=Lax/Strict）
-- **Response 200**: `{ "userId": "uuid" }`
+### ログインフロー（GitHub OAuth）
+- ログイン開始はフロントエンドから Supabase の OAuth フローを開始する（「GitHubでログイン」ボタン）
+- OAuthコールバックは Next.js 側のルート（例: `/auth/callback`）で処理し、SupabaseセッションCookieを確立する
+- API（`/api/**`）は、受け取ったCookieから「現在ユーザー」を復元してアクセス制御を行う
 
 ### POST /api/auth/logout
 - **目的**: セッション無効化
 - **Response 204**
+
+### GET /api/auth/me
+- **目的**: 現在ログイン中のユーザーを取得（デバッグ/UI初期化用）
+- **Response 200**
+  ```json
+  { "user": { "id": "uuid" } }
+  ```
+- **Response 401**: 未ログイン
 
 ### 認証必須のアクセス制御
 - すべての会話・メッセージAPIは認証必須
@@ -175,7 +170,7 @@ Remix (React) + Cloudflare Pages + Supabase + Prisma 構成を前提とし、基
 
 ## 🧪 テスト方針（APIレイヤ）
 
-- ユニット: Loader/Action（Remix）を Vitest でモックテスト
+- ユニット: Route Handlers / Server Actions を Vitest でモックテスト
 - 結合: Prisma をテストDB（Supabaseローカル or SQLite in-memory）で実行
 - E2E: Playwright で主要フロー（セッション作成→メッセージ分岐→コンテキスト取得→LLM呼び出しダミー）
 

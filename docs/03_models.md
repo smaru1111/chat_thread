@@ -37,34 +37,28 @@
 
 ## 📊 データベーススキーマ
 
-### 0. users / auth_accounts（認証・ユーザー管理）
+### 0. users（認証・ユーザー管理）
 
-Remix Auth + Supabaseを前提に、ローカルDBでユーザーを管理し、認証プロバイダのユーザーIDをマッピングします。OAuthを想定し多プロバイダ対応できる形にします。
+本プロジェクトは **Next.js + Supabase Auth（GitHub OAuthのみ）** を前提にします。
+
+Supabase Auth のユーザーID（`auth.users.id` の UUID）をアプリ側のユーザー識別子として扱い、アプリ用の `users`（プロフィール）テーブルを **同一UUIDで管理**します。
+
+- `users.id` = `auth.users.id`
+- GitHub固有情報（ユーザー名など）は必要に応じて `users` の追加カラムに保持
+- 多プロバイダ対応が必要になった段階で、別途 `auth_accounts` のようなマッピングテーブルを追加する
 
 ```sql
 CREATE TABLE users (
   id              UUID PRIMARY KEY,
   display_name    TEXT,
-  email           TEXT,              -- 必須にする場合は UNIQUE 制約を付与
+  email           TEXT,              -- 任意（Supabaseのメールを同期したい場合）
+  github_username TEXT,              -- 任意
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- 多プロバイダ対応: provider + provider_user_id を一意に
-CREATE TABLE auth_accounts (
-  id                UUID PRIMARY KEY,
-  user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider          TEXT NOT NULL,          -- e.g. 'google', 'github', 'email'
-  provider_user_id  TEXT NOT NULL,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (provider, provider_user_id)
-);
-
-CREATE INDEX idx_auth_accounts_user ON auth_accounts (user_id);
 ```
-
 **運用方針**:
-- Supabase Authを使う場合: Supabaseの`auth.users`のUUIDを`auth_accounts.provider_user_id`として保存し、`provider='supabase'`等で識別。ローカル`users.id`と紐づけて、`conversations.user_id`はローカル`users.id`を参照。
-- Remix Authのみを使う場合: 初回ログイン時に`users`行を作成し、`auth_accounts`にプロバイダIDを紐づけ。
+- 初回ログイン時に `users` が存在しなければ作成（`id` は `auth.users.id` を使用）
+- `conversations.user_id` は `users.id` を参照（= Supabase AuthのユーザーID）
 
 ### 1. conversations テーブル
 

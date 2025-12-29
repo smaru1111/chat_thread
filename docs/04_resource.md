@@ -18,7 +18,7 @@
 ```
 ┌─────────────────────────────────────────┐
 │  フロントエンド + バックエンド           │
-│  Remix (React) + TypeScript             │
+│  Next.js (App Router) + TypeScript      │
 │  └─ Vercel (ホスティング)               │
 ├─────────────────────────────────────────┤
 │  データベース                            │
@@ -26,7 +26,7 @@
 │  └─ Prisma (ORM)                        │
 ├─────────────────────────────────────────┤
 │  認証                                    │
-│  Remix Auth                              │
+│  Supabase Auth（GitHub OAuthのみ）       │
 ├─────────────────────────────────────────┤
 │  CI/CD                                   │
 │  Vercel (自動デプロイ)                   │
@@ -38,24 +38,24 @@
 
 ## 🖥️ フロントエンド・バックエンド
 
-### Remix (React) + TypeScript
+### Next.js（App Router） + TypeScript
 
 **選定理由**：
 
 1. **統合型アーキテクチャ**
    - フロントエンドとバックエンドを同一リポジトリで管理
-   - Loader/Actionパターンによるデータフェッチングが効率的
-   - サーバーサイドとクライアントサイドの境界が明確
+   - Server Components / Route Handlers により、SSRとAPI実装を同一アプリで完結できる
+   - サーバーサイドとクライアントサイドの境界が明確（RSC / Client Component）
 
 2. **Vercelとの相性**
-   - RemixはVercelで公式サポート
+   - Next.jsはVercelのファーストパーティ
    - Node.jsランタイムでPrismaがそのまま動作
    - Vercelの自動デプロイとシームレスに統合
 
 3. **パフォーマンス**
-   - データローディングの最適化（Loaderによる並列フェッチ）
+   - サーバー側でのデータ取得（RSC）とストリーミング
    - プログレッシブエンハンスメント
-   - フォーム処理が簡単（Actionパターン）
+   - フォーム処理は Server Actions / Route Handlers を選べる
 
 4. **開発体験**
    - TypeScriptによる型安全性
@@ -68,7 +68,7 @@
    - コミュニティサポートが豊富
 
 **バージョン**：
-- Remix: 2.x（最新の安定版）
+- Next.js: 15.x（安定版）
 - React: 18.x
 - TypeScript: 5.x
 
@@ -80,8 +80,8 @@
 
 **選定理由**：
 
-1. **Remixとの統合**
-   - Remixの公式サポート（自動検出・最適化）
+1. **Next.jsとの統合**
+   - Next.jsの公式サポート（自動検出・最適化）
    - Node.jsランタイムでPrismaがそのまま動作
    - サーバーレス関数として自動デプロイ
 
@@ -113,7 +113,7 @@
 
 **設定**：
 - ビルドコマンド: `npm run build`（自動検出）
-- フレームワーク: Remix（自動検出）
+- フレームワーク: Next.js（自動検出）
 - Node.jsバージョン: 18.x または 20.x（自動検出）
 
 ---
@@ -167,8 +167,8 @@
    - スキーマ定義が直感的
    - 自動生成される型定義
 
-3. **Remixとの相性**
-   - Loader/Actionでの使用が自然
+3. **Next.jsとの相性**
+   - Route Handlers / Server Actions / Server Components での利用が自然
    - サーバーサイドでの実行に最適
    - エラーハンドリングが明確
 
@@ -184,28 +184,25 @@
 
 ## 🔐 認証
 
-### Remix Auth
+### Supabase Auth（GitHub OAuthのみ） + `@supabase/ssr`
 
 **選定理由**：
 
-1. **Remixとの統合**
-   - Remix公式の認証ソリューション
-   - Loader/Actionパターンとの相性
-   - セッション管理が簡単
+1. **Next.js（SSR）との統合**
+   - `@supabase/ssr` により、SSR/Route Handlers でCookieからユーザー復元ができる
+   - HttpOnly Cookieベースのセッション管理が容易
 
 2. **柔軟性**
-   - 複数の認証プロバイダーに対応
-   - カスタム認証戦略の実装が容易
-   - セッションストレージの選択肢が豊富
+   - Supabase側でOAuthプロバイダー追加が可能（将来拡張）
+   - 認証とDB（Postgres）を同一基盤で扱える
 
 3. **セキュリティ**
-   - セッション管理が安全
-   - CSRF保護
-   - パスワードハッシュ化のサポート
+   - OAuth（GitHub）に限定し、資格情報管理（パスワード保管）を不要にする
+   - Cookie属性（HttpOnly / Secure / SameSite）を適切に設定
 
 **実装方針**：
-- 初期はシンプルなメール/パスワード認証
-- 必要に応じてOAuth（Google、GitHub等）を追加
+- 初期は **GitHub OAuthのみ**
+- GitHub OAuth の Client ID / Secret は **Supabase側（Auth Providers設定）** で管理
 
 ---
 
@@ -242,14 +239,13 @@
 
 ## 🔄 状態管理
 
-### Remix Loader/Action + React Hooks
+### Server Components（RSC） + React Hooks（必要に応じて TanStack Query）
 
 **選定理由**：
 
-1. **Remixの設計思想**
-   - サーバー状態はLoaderで管理
-   - クライアント状態はReact Hooksで管理
-   - 追加の状態管理ライブラリが不要
+1. **Next.jsの設計に沿う**
+   - 初期データは Server Components で取得（SSR）
+   - ユーザー操作（投稿/分岐/ストリーミング表示）は Client Component で扱う
 
 2. **シンプルさ**
    - 学習コストが低い
@@ -262,7 +258,7 @@
    - キャッシングが簡単
 
 **必要に応じて追加**：
-- React Query（複雑なキャッシングが必要な場合）
+- TanStack Query（複雑なキャッシングが必要な場合）
 - Zustand（グローバル状態が必要な場合）
 
 ---
@@ -278,10 +274,9 @@
    - TypeScriptとの統合が優秀
    - ESMサポート
 
-2. **Remixとの統合**
-   - Remix Testing Utilitiesとの相性
-   - サーバーサイドテストが簡単
-   - Loader/Actionのテストが容易
+2. **Next.jsとの統合**
+   - Route Handlers / サーバー関数をユニットテストしやすい
+   - UIは Testing Library でコンポーネントテスト可能
 
 3. **開発体験**
    - ウォッチモードが高速
@@ -306,10 +301,9 @@
    - 追加のインストールが不要
    - 互換性が高い
 
-2. **Cloudflare Pagesとの相性**
-   - デフォルトでサポート
-   - 設定が不要
-   - ビルドが安定
+2. **標準的な採用**
+   - CI/CD（GitHub Actions）やVercelで安定して動作
+   - 初期導入コストが低い
 
 **代替案**：
 - pnpm（より高速、ディスク効率が良い）
@@ -357,7 +351,7 @@ jobs:
 
 **Vercel設定**：
 - ビルドコマンド: `npm run build`（自動検出）
-- フレームワーク: Remix（自動検出）
+- フレームワーク: Next.js（自動検出）
 - 環境変数: Vercelダッシュボードで管理
   - Production環境
   - Preview環境
@@ -454,12 +448,12 @@ jobs:
    - チーム開発での統一
 
 2. **Remixとの統合**
-   - Remix公式のESLint設定
+   - Next.js推奨のESLint設定
    - TypeScript対応
    - 自動フォーマット
 
 **設定**：
-- ESLint: Remix公式設定 + TypeScript設定
+- ESLint: Next.js推奨設定 + TypeScript設定
 - Prettier: 標準設定 + Tailwind CSSプラグイン
 
 ---
@@ -468,11 +462,11 @@ jobs:
 
 | カテゴリ | 技術 | 選定理由 |
 |---------|------|---------|
-| **フロントエンド** | Remix (React) | Vercelとの統合、統合型アーキテクチャ |
-| **ホスティング** | Vercel | Remixサポート、Prisma動作、無料枠 |
+| **フロントエンド** | Next.js（App Router） | 統合型アーキテクチャ、SSR/RSC、Vercelとの相性 |
+| **ホスティング** | Vercel | Next.jsファーストパーティ、Prisma動作、無料枠 |
 | **データベース** | PostgreSQL (Supabase) | マネージド、無料枠、簡単なセットアップ |
 | **ORM** | Prisma | 型安全性、マイグレーション管理 |
-| **認証** | Remix Auth | Remix公式、柔軟性 |
+| **認証** | Supabase Auth（GitHub OAuthのみ） | OAuthに限定して資格情報管理を不要化、SSR連携が容易 |
 | **スタイリング** | Tailwind CSS | デファクト、開発効率 |
 | **テスト** | Vitest | 高速、TypeScript統合 |
 | **CI/CD** | Vercel + GitHub Actions | 自動デプロイ、テスト自動化 |
@@ -484,18 +478,18 @@ jobs:
 
 ### ツールと方針
 - **TypeScript**: `strict` 有効。型エラーゼロを前提。
-- **ESLint**: Remix推奨設定 + TypeScript + Tailwindプラグイン。`npm run lint` をCI必須。
+- **ESLint**: Next.js推奨設定 + TypeScript + Tailwindプラグイン。`npm run lint` をCI必須。
 - **Prettier**: フォーマッタ。`npm run format` で実行。CIでは `--check`。
-- **Vitest**: ユニット/結合テスト。Loader/Actionのモックテストを中心に。`npm run test`
+- **Vitest**: ユニット/結合テスト。Route Handlers / サーバー関数のテストを中心に。`npm run test`
 - **Playwright（任意/後追い）**: 主要フローのE2E（認証→メッセージ投稿→分岐→LLMダミー）。
 - **lint-staged + simple-git-hooks**: コミット前に `lint` / `typecheck` / `format` / `test --runInBand` を最小範囲で実行。
 
 ### 推奨 npm scripts（例）
 ```
 "scripts": {
-  "dev": "remix dev",
-  "build": "remix build",
-  "start": "remix-serve build",
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
   "lint": "eslint . --ext ts,tsx",
   "format": "prettier --write .",
   "format:check": "prettier --check .",
@@ -536,12 +530,10 @@ jobs:
 
 3. **必要な環境変数を追加**
    - `DATABASE_URL`: PostgreSQL接続文字列（Supabaseから取得）
-   - `SUPABASE_URL`: SupabaseプロジェクトURL
-   - `SUPABASE_ANON_KEY`: Supabase anon公開キー
-   - `SESSION_SECRET`: セッション署名用のランダム文字列（`openssl rand -hex 32`で生成）
+   - `NEXT_PUBLIC_SUPABASE_URL`: SupabaseプロジェクトURL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anon公開キー
    - `OPENAI_API_KEY`: OpenAI APIキー
-   - `GH_CLIENT_ID`: GitHub OAuth Client ID
-   - `GH_CLIENT_SECRET`: GitHub OAuth Client Secret
+   - （注）GitHub OAuthのClient ID / Secret は Supabase 側（Auth Providers設定）で管理する
 
 4. **環境ごとの設定**
    - Production: 本番環境用の値
@@ -554,12 +546,9 @@ jobs:
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOi...
-SESSION_SECRET=your-session-secret-here
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
 OPENAI_API_KEY=sk-...
-GH_CLIENT_ID=your-github-client-id
-GH_CLIENT_SECRET=your-github-client-secret
 ```
 
 **注意**: `.env` ファイルは `.gitignore` に含まれているため、Gitにコミットされません。
@@ -589,8 +578,8 @@ GitHub Actionsでテストを実行する場合、以下のシークレットを
 
 ## 📚 参考リンク
 
-- [Remix公式ドキュメント](https://remix.run/docs)
-- [Vercel Remixドキュメント](https://vercel.com/docs/frameworks/remix)
+- [Next.js公式ドキュメント](https://nextjs.org/docs)
+- [Vercel Next.jsドキュメント](https://vercel.com/docs/frameworks/nextjs)
 - [Supabaseドキュメント](https://supabase.com/docs)
 - [Prismaドキュメント](https://www.prisma.io/docs)
 - [Tailwind CSSドキュメント](https://tailwindcss.com/docs)
