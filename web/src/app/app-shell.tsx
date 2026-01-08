@@ -51,6 +51,37 @@ function buildChildren(items: Message[]) {
   return map
 }
 
+function RoleAvatar({ role }: { role: "user" | "assistant" | string }) {
+  const isUser = role === "user"
+  const label = isUser ? "User" : "Assistant"
+  return (
+    <div
+      className={[
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        isUser ? "bg-muted text-foreground" : "bg-primary text-primary-foreground",
+      ].join(" ")}
+      aria-label={label}
+      title={label}
+    >
+      {isUser ? "U" : "A"}
+    </div>
+  )
+}
+
+function countDescendants(
+  children: Map<string | null, Message[]>,
+  rootId: string
+) {
+  let count = 0
+  const queue = [...(children.get(rootId) ?? [])]
+  while (queue.length) {
+    const cur = queue.shift()!
+    count += 1
+    queue.push(...(children.get(cur.id) ?? []))
+  }
+  return count
+}
+
 export function AppShell() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversationId, setSelectedConversationId] = useState<
@@ -95,6 +126,14 @@ export function AppShell() {
     const roots = (children.get(null) ?? []).filter((m) => m.role === "user")
     return roots
   }, [children])
+
+  const threadReplyCountById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const m of messages) {
+      map.set(m.id, countDescendants(children, m.id))
+    }
+    return map
+  }, [children, messages])
 
   const selectedThreadRoot = threadRootMessageId
     ? (byId.get(threadRootMessageId) ?? null)
@@ -190,10 +229,12 @@ export function AppShell() {
     await refreshMessages()
   }
 
+  const isThreadOpen = threadRootMessageId !== null
+
   return (
-    <div className="h-screen">
-      <div className="grid h-full grid-cols-[260px_1fr_420px]">
-        <aside className="border-r p-3">
+    <div className="h-screen overflow-hidden">
+      <div className="flex h-full min-h-0 overflow-hidden">
+        <aside className="w-[260px] shrink-0 border-r p-3">
           <div className="mb-3 flex items-center gap-2">
             <Input
               placeholder="新規セッション（任意）"
@@ -232,40 +273,66 @@ export function AppShell() {
           </ScrollArea>
         </aside>
 
-        <main className="flex min-w-0 flex-col">
-          <ScrollArea className="flex-1">
+        <main className="flex min-w-0 min-h-0 flex-col">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="space-y-6 p-4">
               {mainRoots.map((root) => {
                 const ai =
                   (children.get(root.id) ?? []).find(
                     (m) => m.role === "assistant"
                   ) ?? null
+                const replyCount = ai
+                  ? (threadReplyCountById.get(ai.id) ?? 0)
+                  : 0
                 return (
                   <div key={root.id} className="space-y-2">
-                    <div className="rounded-lg border p-3">
-                      <div className="text-muted-foreground text-xs">User</div>
-                      <div className="whitespace-pre-wrap">{root.content}</div>
+                    <div className="group rounded-lg p-3 transition-colors hover:bg-muted/50">
+                      <div className="flex gap-3">
+                        <RoleAvatar role="user" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-muted-foreground text-xs">
+                            User
+                          </div>
+                          <div className="whitespace-pre-wrap">
+                            {root.content}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     {ai && (
-                      <div className="group rounded-lg border p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-muted-foreground text-xs">
-                              Assistant
+                      <div className="group rounded-lg p-3 transition-colors hover:bg-muted/50">
+                        <div className="flex gap-3">
+                          <RoleAvatar role="assistant" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-muted-foreground text-xs">
+                                  Assistant
+                                </div>
+                                <div className="break-words whitespace-pre-wrap">
+                                  {ai.content}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="opacity-0 transition-opacity group-hover:opacity-100"
+                                onClick={() => setThreadRootMessageId(ai.id)}
+                              >
+                                スレッドで質問
+                              </Button>
                             </div>
-                            <div className="break-words whitespace-pre-wrap">
-                              {ai.content}
-                            </div>
+
+                            {replyCount > 0 && (
+                              <button
+                                className="mt-2 text-left text-xs text-muted-foreground hover:underline"
+                                onClick={() => setThreadRootMessageId(ai.id)}
+                              >
+                                {replyCount}件の返信
+                              </button>
+                            )}
                           </div>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="opacity-0 transition-opacity group-hover:opacity-100"
-                            onClick={() => setThreadRootMessageId(ai.id)}
-                          >
-                            スレッドで質問
-                          </Button>
                         </div>
                       </div>
                     )}
@@ -281,7 +348,7 @@ export function AppShell() {
             </div>
           </ScrollArea>
 
-          <div className="border-t p-3">
+          <div className="sticky bottom-0 border-t bg-background p-3">
             <div className="flex items-end gap-2">
               <Textarea
                 value={mainInput}
@@ -294,15 +361,34 @@ export function AppShell() {
           </div>
         </main>
 
-        <aside className="flex min-w-0 flex-col border-l">
+        {/* Right thread pane (opens by expanding width) */}
+        <aside
+          className={[
+            "flex h-full min-w-0 min-h-0 shrink-0 flex-col bg-background transition-[width] duration-200",
+            isThreadOpen ? "w-[420px] border-l" : "w-0 border-l-0",
+            isThreadOpen ? "pointer-events-auto" : "pointer-events-none",
+            "overflow-hidden",
+          ].join(" ")}
+        >
           <div className="border-b p-4">
-            <div className="text-sm font-medium">スレッド</div>
-            <div className="text-muted-foreground mt-1 text-xs">
-              AIメッセージの「スレッドで質問」から開きます
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium">スレッド</div>
+                <div className="text-muted-foreground mt-1 text-xs">
+                  メッセージ下の「◯件の返信」または「スレッドで質問」から開きます
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setThreadRootMessageId(null)}
+              >
+                閉じる
+              </Button>
             </div>
           </div>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="space-y-3 p-4">
               {!selectedThreadRoot && (
                 <div className="text-muted-foreground text-sm">
@@ -312,22 +398,35 @@ export function AppShell() {
 
               {selectedThreadRoot && (
                 <>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-muted-foreground text-xs">
-                      起点（Assistant）
-                    </div>
-                    <div className="break-words whitespace-pre-wrap">
-                      {selectedThreadRoot.content}
+                  <div className="rounded-lg p-3 transition-colors hover:bg-muted/50">
+                    <div className="flex gap-3">
+                      <RoleAvatar role="assistant" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-muted-foreground text-xs">
+                          起点（Assistant）
+                        </div>
+                        <div className="break-words whitespace-pre-wrap">
+                          {selectedThreadRoot.content}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
                   {threadMessages.map((m) => (
-                    <div key={m.id} className="rounded-lg border p-3">
-                      <div className="text-muted-foreground text-xs">
-                        {m.role === "user" ? "User" : "Assistant"}
-                      </div>
-                      <div className="break-words whitespace-pre-wrap">
-                        {m.content}
+                    <div
+                      key={m.id}
+                      className="rounded-lg p-3 transition-colors hover:bg-muted/50"
+                    >
+                      <div className="flex gap-3">
+                        <RoleAvatar role={m.role} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-muted-foreground text-xs">
+                            {m.role === "user" ? "User" : "Assistant"}
+                          </div>
+                          <div className="break-words whitespace-pre-wrap">
+                            {m.content}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -336,7 +435,7 @@ export function AppShell() {
             </div>
           </ScrollArea>
 
-          <div className="border-t p-3">
+          <div className="sticky bottom-0 border-t bg-background p-3">
             <div className="flex items-end gap-2">
               <Textarea
                 value={threadInput}
