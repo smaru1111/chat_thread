@@ -5,7 +5,16 @@ import { prisma } from "@/lib/db";
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string }
 
-async function buildContextForOpenAI(
+type ChatMode = "thread" | "linear"
+
+function parseChatModeFromRequest(request: Request): ChatMode {
+  const url = new URL(request.url)
+  const mode = url.searchParams.get("mode")
+  if (mode === "linear") return "linear"
+  return "thread"
+}
+
+async function buildThreadContextForOpenAI(
   messageId: string
 ): Promise<ChatMessage[]> {
   // /context の仕様を簡易的に再実装（必要なら後で共通化）
@@ -63,13 +72,38 @@ async function buildContextForOpenAI(
   return messages
 }
 
+async function buildLinearContextForOpenAI(
+  messageId: string
+): Promise<ChatMessage[]> {
+  const target = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { id: true, conversationId: true, createdAt: true },
+  })
+  if (!target) return []
+
+  const items = await prisma.message.findMany({
+    where: {
+      conversationId: target.conversationId,
+      createdAt: { lte: target.createdAt },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { role: true, content: true },
+  })
+
+  return items.map((m) => ({
+    role: m.role as ChatMessage["role"],
+    content: m.content,
+  }))
+}
+
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = await requireUserId()
     const { id: messageId } = await params
+    const mode = parseChatModeFromRequest(request)
 
     const target = await prisma.message.findUnique({
       where: { id: messageId },
@@ -93,7 +127,10 @@ export async function POST(
 
     if (openaiKey) {
       try {
-        const context = await buildContextForOpenAI(messageId)
+        const context =
+          mode === "linear"
+            ? await buildLinearContextForOpenAI(messageId)
+            : await buildThreadContextForOpenAI(messageId)
         // system は後で docs に合わせて調整
         const payload = {
           model: "gpt-4o-mini",

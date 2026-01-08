@@ -33,6 +33,7 @@ type Message = {
 }
 
 type Me = { id: string; email: string | null; name: string | null } | null
+type ChatMode = "thread" | "linear"
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -118,6 +119,7 @@ export function AppShell() {
     string | null
   >(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const [chatMode, setChatMode] = useState<ChatMode>("thread")
 
   const [mainInput, setMainInput] = useState("")
 
@@ -141,6 +143,29 @@ export function AppShell() {
 
   const [me, setMe] = useState<Me>(null)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+
+  useEffect(() => {
+    // URLパラメータ（?mode=linear|thread）があれば優先。なければlocalStorageを参照。
+    const url = new URL(window.location.href)
+    const q = url.searchParams.get("mode")
+    const stored = window.localStorage.getItem("chat_mode")
+    const initial: ChatMode =
+      q === "linear" || q === "thread"
+        ? q
+        : stored === "linear" || stored === "thread"
+          ? (stored as ChatMode)
+          : "thread"
+    setChatMode(initial)
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem("chat_mode", chatMode)
+    if (chatMode === "linear") {
+      // 線形モードではスレッドを閉じる（操作の混在を防ぐ）
+      setThreadRootMessageId(null)
+      setThreadInput("")
+    }
+  }, [chatMode])
 
   const mainEndRef = useRef<HTMLDivElement | null>(null)
   const threadEndRef = useRef<HTMLDivElement | null>(null)
@@ -215,6 +240,11 @@ export function AppShell() {
     const roots = (children.get(null) ?? []).filter((m) => m.role === "user")
     return roots
   }, [children])
+
+  const linearTimeline = useMemo(() => {
+    // 線形モードでは親子関係を無視し、createdAt順の全メッセージを時系列表示する
+    return messages
+  }, [messages])
 
   const threadReplyCountById = useMemo(() => {
     const map = new Map<string, number>()
@@ -375,7 +405,7 @@ export function AppShell() {
       scrollToMainEnd()
 
       const assistantMsg = await api<Message>(
-        `/api/messages/${userMsg.id}/complete`,
+        `/api/messages/${userMsg.id}/complete?mode=${chatMode}`,
         { method: "POST" }
       )
 
@@ -431,7 +461,7 @@ export function AppShell() {
       scrollToThreadEnd()
 
       const assistantMsg = await api<Message>(
-        `/api/messages/${userMsg.id}/complete`,
+        `/api/messages/${userMsg.id}/complete?mode=${chatMode}`,
         { method: "POST" }
       )
 
@@ -727,6 +757,57 @@ export function AppShell() {
                     (selectedConversation ? "Untitled" : "会話を選択してください")}
                 </div>
               </div>
+              <div className="shrink-0 flex items-center gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={chatMode === "linear" ? "default" : "secondary"}
+                  onClick={() => setChatMode("linear")}
+                >
+                  線形
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={chatMode === "thread" ? "default" : "secondary"}
+                  onClick={() => setChatMode("thread")}
+                >
+                  スレッド
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop/tablet header */}
+          <div className="hidden md:block shrink-0 border-b bg-background p-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold tracking-wide">
+                  {selectedConversation?.title ||
+                    (selectedConversation ? "Untitled" : "会話を選択してください")}
+                </div>
+                <div className="text-muted-foreground truncate text-xs">
+                  モード: {chatMode === "linear" ? "線形" : "スレッド"}
+                </div>
+              </div>
+              <div className="shrink-0 flex items-center gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={chatMode === "linear" ? "default" : "secondary"}
+                  onClick={() => setChatMode("linear")}
+                >
+                  線形
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={chatMode === "thread" ? "default" : "secondary"}
+                  onClick={() => setChatMode("thread")}
+                >
+                  スレッド
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -744,86 +825,129 @@ export function AppShell() {
                 </div>
               ) : (
                 <>
-                  {mainRoots.map((root) => {
-                    const ai =
-                      (children.get(root.id) ?? []).find(
-                        (m) => m.role === "assistant"
-                      ) ?? null
-                    const replyCount = ai
-                      ? (threadReplyCountById.get(ai.id) ?? 0)
-                      : 0
-                    const isPendingAi = ai
-                      ? ai.id.startsWith("pending-assistant-")
-                      : false
-                    return (
-                      <div key={root.id} className="space-y-2">
-                        <div className="group rounded-lg p-3 transition-colors hover:bg-muted/50">
+                  {chatMode === "linear" ? (
+                    <>
+                      {linearTimeline.map((m) => (
+                        <div
+                          key={m.id}
+                          className="rounded-lg p-3 transition-colors hover:bg-muted/50"
+                        >
                           <div className="flex gap-3">
-                            <RoleAvatar role="user" />
+                            <RoleAvatar role={m.role} />
                             <div className="min-w-0 flex-1">
                               <div className="text-muted-foreground text-xs">
-                                User
+                                {m.role === "user" ? "User" : "Assistant"}
                               </div>
-                              <div className="whitespace-pre-wrap">
-                                {root.content}
+                              <div className="wrap-break-word whitespace-pre-wrap">
+                                <span
+                                  className={
+                                    m.id.startsWith("pending-assistant-")
+                                      ? "text-muted-foreground animate-pulse"
+                                      : undefined
+                                  }
+                                >
+                                  {m.content}
+                                </span>
                               </div>
                             </div>
                           </div>
                         </div>
+                      ))}
 
-                        {ai && (
-                          <div className="group rounded-lg p-3 transition-colors hover:bg-muted/50">
-                            <div className="flex gap-3">
-                              <RoleAvatar role="assistant" />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="text-muted-foreground text-xs">
-                                      Assistant
-                                    </div>
-                                    <div className="wrap-break-word whitespace-pre-wrap">
-                                      <span
-                                        className={
-                                          isPendingAi
-                                            ? "text-muted-foreground animate-pulse"
-                                            : undefined
-                                        }
-                                      >
-                                        {ai.content}
-                                      </span>
-                                    </div>
+                      {linearTimeline.length === 0 && (
+                        <div className="text-muted-foreground text-sm">
+                          まずは質問してみてください。
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {mainRoots.map((root) => {
+                        const ai =
+                          (children.get(root.id) ?? []).find(
+                            (m) => m.role === "assistant"
+                          ) ?? null
+                        const replyCount = ai
+                          ? (threadReplyCountById.get(ai.id) ?? 0)
+                          : 0
+                        const isPendingAi = ai
+                          ? ai.id.startsWith("pending-assistant-")
+                          : false
+                        return (
+                          <div key={root.id} className="space-y-2">
+                            <div className="group rounded-lg p-3 transition-colors hover:bg-muted/50">
+                              <div className="flex gap-3">
+                                <RoleAvatar role="user" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-muted-foreground text-xs">
+                                    User
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    className="opacity-100 md:opacity-0 transition-opacity md:group-hover:opacity-100"
-                                    onClick={() => setThreadRootMessageId(ai.id)}
-                                    disabled={isPendingAi}
-                                  >
-                                    スレッドで質問
-                                  </Button>
+                                  <div className="whitespace-pre-wrap">
+                                    {root.content}
+                                  </div>
                                 </div>
-
-                                {replyCount > 0 && (
-                                  <button
-                                    className="mt-2 text-left text-xs text-blue-400 underline hover:text-blue-600"
-                                    onClick={() => setThreadRootMessageId(ai.id)}
-                                  >
-                                    {replyCount}件の返信
-                                  </button>
-                                )}
                               </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
 
-                  {mainRoots.length === 0 && (
-                    <div className="text-muted-foreground text-sm">
-                      まずはメインで質問してみてください。
-                    </div>
+                            {ai && (
+                              <div className="group rounded-lg p-3 transition-colors hover:bg-muted/50">
+                                <div className="flex gap-3">
+                                  <RoleAvatar role="assistant" />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="text-muted-foreground text-xs">
+                                          Assistant
+                                        </div>
+                                        <div className="wrap-break-word whitespace-pre-wrap">
+                                          <span
+                                            className={
+                                              isPendingAi
+                                                ? "text-muted-foreground animate-pulse"
+                                                : undefined
+                                            }
+                                          >
+                                            {ai.content}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="opacity-100 md:opacity-0 transition-opacity md:group-hover:opacity-100"
+                                        onClick={() =>
+                                          setThreadRootMessageId(ai.id)
+                                        }
+                                        disabled={isPendingAi}
+                                      >
+                                        スレッドで質問
+                                      </Button>
+                                    </div>
+
+                                    {replyCount > 0 && (
+                                      <button
+                                        className="mt-2 text-left text-xs text-blue-400 underline hover:text-blue-600"
+                                        onClick={() =>
+                                          setThreadRootMessageId(ai.id)
+                                        }
+                                      >
+                                        {replyCount}件の返信
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+
+                      {mainRoots.length === 0 && (
+                        <div className="text-muted-foreground text-sm">
+                          まずはメインで質問してみてください。
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -837,7 +961,7 @@ export function AppShell() {
               <Textarea
                 value={mainInput}
                 onChange={(e) => setMainInput(e.target.value)}
-                placeholder="メインで質問する"
+                placeholder={chatMode === "linear" ? "質問する" : "メインで質問する"}
                 className="min-h-[44px]"
                 disabled={!selectedConversationId || isSendingMain}
                 onKeyDown={(e) => {
@@ -864,7 +988,7 @@ export function AppShell() {
         </main>
 
         {/* Right thread pane (only mounted when open to avoid blank area) */}
-        {isThreadOpen && (
+        {chatMode === "thread" && isThreadOpen && (
           <>
             {/* Desktop (lg+): right pane */}
             <aside className="hidden lg:flex h-full w-[420px] min-w-0 min-h-0 shrink-0 flex-col border-l bg-background">
