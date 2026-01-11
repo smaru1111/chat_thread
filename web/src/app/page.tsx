@@ -25,9 +25,7 @@ function buildQueryString(
 export default async function Home({
   searchParams,
 }: {
-  searchParams?:
-    | Record<string, string | string[] | undefined>
-    | Promise<Record<string, string | string[] | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = searchParams ? await searchParams : undefined
   const supabase = await createClient()

@@ -1,6 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkBreaks from "remark-breaks"
+import remarkGfm from "remark-gfm"
 
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -74,6 +77,129 @@ function RoleAvatar({ role }: { role: "user" | "assistant" | string }) {
       title={label}
     >
       {isUser ? "U" : "A"}
+    </div>
+  )
+}
+
+const MARKDOWN_TEST_PREFIX = `
+# Markdown表示テスト
+# H1
+## H2
+### H3
+
+- **太字**
+- *斜体*
+- \`inline code\`
+- [リンク](https://example.com)
+
+> 引用（blockquote）
+
+\`\`\`ts
+const x: number = 1
+console.log(x)
+\`\`\`
+
+- [x] タスク（完了）
+- [ ] タスク（未完了）
+
+| col1 | col2 |
+| --- | --- |
+| a | b |
+`
+
+function MarkdownMessage({
+  content,
+  isPending,
+}: {
+  content: string
+  isPending?: boolean
+}) {
+  // eslint-disable-next-line prefer-const
+  let md = content
+  // Markdown表示のテスト用（不要になったら次の1行をコメントアウトしてください）
+  // md = `${MARKDOWN_TEST_PREFIX}\n\n${md}`
+
+  return (
+    <div
+      className={[
+        "min-w-0 wrap-break-word",
+        isPending ? "text-muted-foreground animate-pulse" : "",
+      ].join(" ")}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        components={{
+          h1: ({ children }) => (
+            <h1 className="mt-2 text-lg font-semibold">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mt-2 text-base font-semibold">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mt-2 text-sm font-semibold">{children}</h3>
+          ),
+          p: ({ children }) => <p className="whitespace-pre-wrap">{children}</p>,
+          a: ({ children, href }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-blue-400 underline hover:text-blue-600"
+            >
+              {children}
+            </a>
+          ),
+          ul: ({ children }) => (
+            <ul className="ml-5 list-disc space-y-1">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="ml-5 list-decimal space-y-1">{children}</ol>
+          ),
+          li: ({ children }) => <li className="whitespace-pre-wrap">{children}</li>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-muted-foreground/40 pl-3 text-muted-foreground">
+              {children}
+            </blockquote>
+          ),
+          code: ({ node: _node, className, children, ...props }) => {
+            const isBlock = Boolean(className)
+            if (!isBlock) {
+              return (
+                <code
+                  className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]"
+                  {...props}
+                >
+                  {children}
+                </code>
+              )
+            }
+            return (
+              <code className={["font-mono text-xs", className ?? ""].join(" ")} {...props}>
+                {children}
+              </code>
+            )
+          },
+          pre: ({ children }) => (
+            <pre className="overflow-x-auto rounded-md bg-muted p-3">{children}</pre>
+          ),
+          hr: () => <hr className="my-2 border-border" />,
+          table: ({ children }) => (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">{children}</table>
+            </div>
+          ),
+          th: ({ children }) => (
+            <th className="border border-border bg-muted px-2 py-1 text-left font-medium">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border border-border px-2 py-1 align-top">{children}</td>
+          ),
+        }}
+      >
+        {md}
+      </ReactMarkdown>
     </div>
   )
 }
@@ -838,17 +964,10 @@ export function AppShell() {
                               <div className="text-muted-foreground text-xs">
                                 {m.role === "user" ? "User" : "Assistant"}
                               </div>
-                              <div className="wrap-break-word whitespace-pre-wrap">
-                                <span
-                                  className={
-                                    m.id.startsWith("pending-assistant-")
-                                      ? "text-muted-foreground animate-pulse"
-                                      : undefined
-                                  }
-                                >
-                                  {m.content}
-                                </span>
-                              </div>
+                              <MarkdownMessage
+                                content={m.content}
+                                isPending={m.id.startsWith("pending-assistant-")}
+                              />
                             </div>
                           </div>
                         </div>
@@ -882,9 +1001,7 @@ export function AppShell() {
                                   <div className="text-muted-foreground text-xs">
                                     User
                                   </div>
-                                  <div className="whitespace-pre-wrap">
-                                    {root.content}
-                                  </div>
+                                  <MarkdownMessage content={root.content} />
                                 </div>
                               </div>
                             </div>
@@ -899,17 +1016,10 @@ export function AppShell() {
                                         <div className="text-muted-foreground text-xs">
                                           Assistant
                                         </div>
-                                        <div className="wrap-break-word whitespace-pre-wrap">
-                                          <span
-                                            className={
-                                              isPendingAi
-                                                ? "text-muted-foreground animate-pulse"
-                                                : undefined
-                                            }
-                                          >
-                                            {ai.content}
-                                          </span>
-                                        </div>
+                                        <MarkdownMessage
+                                          content={ai.content}
+                                          isPending={isPendingAi}
+                                        />
                                       </div>
                                       <Button
                                         size="sm"
@@ -1024,9 +1134,7 @@ export function AppShell() {
                             <div className="text-muted-foreground text-xs">
                               起点（Assistant）
                             </div>
-                            <div className="wrap-break-word whitespace-pre-wrap">
-                              {selectedThreadRoot.content}
-                            </div>
+                            <MarkdownMessage content={selectedThreadRoot.content} />
                           </div>
                         </div>
                       </div>
@@ -1042,17 +1150,10 @@ export function AppShell() {
                               <div className="text-muted-foreground text-xs">
                                 {m.role === "user" ? "User" : "Assistant"}
                               </div>
-                              <div className="wrap-break-word whitespace-pre-wrap">
-                                <span
-                                  className={
-                                    m.id.startsWith("pending-assistant-")
-                                      ? "text-muted-foreground animate-pulse"
-                                      : undefined
-                                  }
-                                >
-                                  {m.content}
-                                </span>
-                              </div>
+                              <MarkdownMessage
+                                content={m.content}
+                                isPending={m.id.startsWith("pending-assistant-")}
+                              />
                             </div>
                           </div>
                         </div>
@@ -1138,9 +1239,7 @@ export function AppShell() {
                                   <div className="text-muted-foreground text-xs">
                                     起点（Assistant）
                                   </div>
-                                  <div className="wrap-break-word whitespace-pre-wrap">
-                                    {selectedThreadRoot.content}
-                                  </div>
+                                  <MarkdownMessage content={selectedThreadRoot.content} />
                                 </div>
                               </div>
                             </div>
@@ -1156,17 +1255,10 @@ export function AppShell() {
                                     <div className="text-muted-foreground text-xs">
                                       {m.role === "user" ? "User" : "Assistant"}
                                     </div>
-                                    <div className="wrap-break-word whitespace-pre-wrap">
-                                      <span
-                                        className={
-                                          m.id.startsWith("pending-assistant-")
-                                            ? "text-muted-foreground animate-pulse"
-                                            : undefined
-                                        }
-                                      >
-                                        {m.content}
-                                      </span>
-                                    </div>
+                                    <MarkdownMessage
+                                      content={m.content}
+                                      isPending={m.id.startsWith("pending-assistant-")}
+                                    />
                                   </div>
                                 </div>
                               </div>
