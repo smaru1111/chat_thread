@@ -1,17 +1,36 @@
 "use client"
 
+import { useMemo } from "react"
+import { useSearchParams } from "next/navigation"
+
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { Chrome, Github } from "lucide-react"
 
 export default function LoginPage() {
+  const searchParams = useSearchParams()
+  const nextPath = useMemo(() => {
+    const raw = searchParams.get("next")
+    if (!raw) return "/"
+    // open redirect対策：アプリ内パスのみ許可
+    if (!raw.startsWith("/")) return "/"
+    return raw
+  }, [searchParams])
+
+  function buildRedirectTo() {
+    // Client Componentでも初回はSSRされ得るため、window参照はイベント内に閉じ込める
+    const u = new URL(`/auth/callback`, window.location.origin)
+    u.searchParams.set("next", nextPath)
+    return u.toString()
+  }
+
   async function onLoginWithGithub() {
     const supabase = createClient()
 
     await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: buildRedirectTo(),
       },
     })
   }
@@ -22,7 +41,7 @@ export default function LoginPage() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: buildRedirectTo(),
       },
     })
   }

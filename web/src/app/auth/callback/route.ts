@@ -4,23 +4,34 @@ import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/db"
 
+function safeNextPath(raw: string | null) {
+  if (!raw) return "/"
+  if (!raw.startsWith("/")) return "/"
+  return raw
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const code = url.searchParams.get("code")
   const origin = url.origin
+  const next = safeNextPath(url.searchParams.get("next"))
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=missing_code`)
+    return NextResponse.redirect(
+      `${origin}/login?error=missing_code&next=${encodeURIComponent(next)}`
+    )
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.redirect(`${origin}/login?error=missing_env`)
+    return NextResponse.redirect(
+      `${origin}/login?error=missing_env&next=${encodeURIComponent(next)}`
+    )
   }
 
-  const response = NextResponse.redirect(`${origin}/`)
+  const response = NextResponse.redirect(`${origin}${next}`)
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -38,7 +49,9 @@ export async function GET(request: NextRequest) {
 
   const { error } = await supabase.auth.exchangeCodeForSession(code)
   if (error) {
-    return NextResponse.redirect(`${origin}/login?error=oauth_exchange_failed`)
+    return NextResponse.redirect(
+      `${origin}/login?error=oauth_exchange_failed&next=${encodeURIComponent(next)}`
+    )
   }
 
   // セッション確立後にユーザー情報を取得し、アプリ側DBへ同期（idは auth.users.id と同一）
