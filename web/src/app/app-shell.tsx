@@ -113,6 +113,7 @@ function RoleAvatar({ role }: { role: "user" | "assistant" | string }) {
   )
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const MARKDOWN_TEST_PREFIX = `
 # Markdown表示テスト
 # H1
@@ -193,7 +194,7 @@ function MarkdownMessage({
               {children}
             </blockquote>
           ),
-          code: ({ node: _node, className, children, ...props }) => {
+          code: ({ className, children, ...props }) => {
             const isBlock = Boolean(className)
             if (!isBlock) {
               return (
@@ -521,11 +522,12 @@ export function AppShell() {
     }
   }
 
-  async function refreshMessages() {
-    if (!selectedConversationId) return
+  async function refreshMessages(conversationId?: string) {
+    const id = conversationId ?? selectedConversationId
+    if (!id) return
     try {
       const d = await api<{ items: Message[] }>(
-        `/api/conversations/${selectedConversationId}/messages`
+        `/api/conversations/${id}/messages`
       )
       setMessages(d.items)
     } catch {
@@ -550,8 +552,10 @@ export function AppShell() {
       ])
       setSelectedConversationId(created.id)
       void refreshConversations()
+      return created
     } catch {
       setUiError("会話の作成に失敗しました。")
+      return null
     } finally {
       setIsCreatingConversation(false)
     }
@@ -618,7 +622,7 @@ export function AppShell() {
   }
 
   async function sendMain() {
-    if (!selectedConversationId || isSendingMain) return
+    if (isSendingMain) return
     const content = mainInput.trim()
     if (!content) return
 
@@ -626,11 +630,18 @@ export function AppShell() {
     setIsSendingMain(true)
     setMainInput("")
 
+    let conversationId: string | null = selectedConversationId
     try {
+      if (!conversationId) {
+        const created = await createConversation()
+        if (!created) return
+        conversationId = created.id
+      }
+
       const userMsg = await api<Message>("/api/messages", {
         method: "POST",
         body: JSON.stringify({
-          conversationId: selectedConversationId,
+          conversationId,
           parentMessageId: null,
           role: "user",
           content,
@@ -657,10 +668,10 @@ export function AppShell() {
       scrollToMainEnd()
 
       void refreshConversations()
-      void maybeAutoTitle(selectedConversationId)
+      void maybeAutoTitle(conversationId)
     } catch {
       setUiError("送信または回答生成に失敗しました。")
-      void refreshMessages()
+      void refreshMessages(conversationId ?? undefined)
       void refreshConversations()
     } finally {
       setIsSendingMain(false)
@@ -1228,7 +1239,7 @@ export function AppShell() {
                 onChange={(e) => setMainInput(e.target.value)}
                 placeholder={chatMode === "linear" ? "質問する" : "メインで質問する"}
                 className="min-h-[44px]"
-                disabled={!selectedConversationId || isSendingMain}
+                disabled={isSendingMain}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && e.metaKey && !e.shiftKey) {
                     e.preventDefault()
@@ -1239,7 +1250,7 @@ export function AppShell() {
               <div className="flex flex-row items-center justify-end sm:flex-col sm:items-center">
                 <Button
                   onClick={sendMain}
-                  disabled={!selectedConversationId || isSendingMain}
+                  disabled={isSendingMain}
                   className="w-full sm:w-auto"
                 >
                   {isSendingMain ? "送信中…" : "送信"}
