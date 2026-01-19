@@ -6,6 +6,7 @@ import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
@@ -37,7 +38,7 @@ type Message = {
   createdAt: string
 }
 
-type Me = { id: string; email: string | null; name: string | null } | null
+type Me = { id: string; email: string | null; name: string | null; isAdmin: boolean } | null
 type ChatMode = "thread" | "linear"
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -305,6 +306,8 @@ export function AppShell() {
 
   const [me, setMe] = useState<Me>(null)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  const [adminConversationId, setAdminConversationId] = useState("")
+  const [isAdminOpening, setIsAdminOpening] = useState(false)
 
   function markCopied(conversationId: string) {
     setCopiedConversationId(conversationId)
@@ -369,6 +372,42 @@ export function AppShell() {
       )
     } catch {
       // ignore
+    }
+  }
+
+  async function openConversationByIdAsAdmin() {
+    setUiError(null)
+    const id = adminConversationId.trim()
+    if (!id) {
+      setUiError("会話IDを入力してください。")
+      return
+    }
+
+    setIsAdminOpening(true)
+    try {
+      const conv = await api<Conversation>(
+        `/api/conversations/${encodeURIComponent(id)}`
+      )
+      setConversations((prev) => {
+        const exists = prev.some((c) => c.id === conv.id)
+        const merged = exists
+          ? prev.map((c) => (c.id === conv.id ? conv : c))
+          : [conv, ...prev]
+        merged.sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )
+        return merged
+      })
+      setSelectedConversationId(conv.id)
+      setThreadRootMessageId(null)
+      setAdminConversationId("")
+      setIsUserMenuOpen(false)
+      setIsSidebarOpen(false)
+    } catch {
+      setUiError("会話が見つかりませんでした。会話IDを確認してください。")
+    } finally {
+      setIsAdminOpening(false)
     }
   }
 
@@ -832,7 +871,7 @@ export function AppShell() {
                             me.name?.trim() ||
                             me.email?.trim() ||
                             `${me.id.slice(0, 8)}…`
-                          }`
+                          }${me.isAdmin ? " (admin)" : ""}`
                         : "未ログイン"}
                     </div>
                     <div className="text-muted-foreground truncate text-xs">
@@ -1438,6 +1477,7 @@ export function AppShell() {
                   <div className="text-muted-foreground mt-1 text-xs space-y-0.5">
                     {me.name && <div>name: {me.name}</div>}
                     {me.email && <div>email: {me.email}</div>}
+                    {me.isAdmin && <div>role: admin</div>}
                     {!me.name && !me.email && <div>ログイン済み</div>}
                   </div>
                 ) : (
@@ -1452,6 +1492,36 @@ export function AppShell() {
                 閉じる
               </Button>
             </div>
+
+            {me?.isAdmin && (
+              <div className="mt-4 rounded-lg border bg-muted/30 p-3">
+                <div className="text-sm font-medium">管理者ツール</div>
+                <div className="text-muted-foreground mt-1 text-xs">
+                  会話IDを入力すると、その会話を閲覧できます。
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Input
+                    value={adminConversationId}
+                    onChange={(e) => setAdminConversationId(e.target.value)}
+                    placeholder="会話ID（UUID）"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        if (!isAdminOpening) void openConversationByIdAsAdmin()
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => void openConversationByIdAsAdmin()}
+                    disabled={isAdminOpening}
+                    className="shrink-0"
+                  >
+                    {isAdminOpening ? "開いています…" : "開く"}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <div className="mt-4 flex items-center justify-end gap-2">
               <Button

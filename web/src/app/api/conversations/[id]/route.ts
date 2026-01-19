@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/db"
-import { requireUserId } from "@/lib/auth"
+import { requireUser } from "@/lib/auth"
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireUserId()
+    const user = await requireUser()
     const { id } = await params
 
     const conversation = await prisma.conversation.findFirst({
-      where: { id, userId },
+      where: user.isAdmin ? { id } : { id, userId: user.id },
       select: { id: true, title: true, createdAt: true, updatedAt: true },
     })
 
@@ -34,11 +34,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireUserId()
+    const user = await requireUser()
     const { id } = await params
 
     const conversation = await prisma.conversation.findFirst({
-      where: { id, userId },
+      // 削除は従来通り「所有者のみ」（管理者でも他人の会話は削除させない）
+      where: { id, userId: user.id },
       select: { id: true },
     })
     if (!conversation) {

@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/db"
-import { requireUserId } from "@/lib/auth"
+import { requireUser } from "@/lib/auth"
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireUserId()
+    const user = await requireUser()
     const { id: conversationId } = await params
 
     const conv = await prisma.conversation.findFirst({
-      where: { id: conversationId, userId },
+      where: user.isAdmin ? { id: conversationId } : { id: conversationId, userId: user.id },
       select: { id: true },
     })
     if (!conv) {
