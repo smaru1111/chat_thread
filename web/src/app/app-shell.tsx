@@ -10,6 +10,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  CheckIcon,
+  CopyIcon,
   Loader2Icon,
   LogOutIcon,
   MenuIcon,
@@ -45,6 +47,35 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!res.ok) throw new Error(`${res.status}`)
   return (await res.json()) as T
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // fall through
+  }
+
+  try {
+    const ta = document.createElement("textarea")
+    ta.value = text
+    ta.setAttribute("readonly", "")
+    ta.style.position = "fixed"
+    ta.style.top = "0"
+    ta.style.left = "-9999px"
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    ta.setSelectionRange(0, ta.value.length)
+    const ok = document.execCommand("copy")
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
 }
 
 function buildById(items: Message[]) {
@@ -267,8 +298,32 @@ export function AppShell() {
     () => new Set()
   )
 
+  const [copiedConversationId, setCopiedConversationId] = useState<string | null>(
+    null
+  )
+  const copiedTimerRef = useRef<number | null>(null)
+
   const [me, setMe] = useState<Me>(null)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+
+  function markCopied(conversationId: string) {
+    setCopiedConversationId(conversationId)
+    if (copiedTimerRef.current !== null) {
+      window.clearTimeout(copiedTimerRef.current)
+    }
+    copiedTimerRef.current = window.setTimeout(() => {
+      setCopiedConversationId(null)
+      copiedTimerRef.current = null
+    }, 1500)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current !== null) {
+        window.clearTimeout(copiedTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     // URLパラメータ（?mode=linear|thread）があれば優先。なければlocalStorageを参照。
@@ -295,6 +350,27 @@ export function AppShell() {
 
   const mainEndRef = useRef<HTMLDivElement | null>(null)
   const threadEndRef = useRef<HTMLDivElement | null>(null)
+
+  async function handleCopyConversationId(conversationId: string) {
+    setUiError(null)
+    const ok = await copyTextToClipboard(conversationId)
+    if (ok) {
+      markCopied(conversationId)
+      return
+    }
+    setUiError(
+      "会話IDのコピーに失敗しました。会話一覧のコピーアイコンをもう一度試すか、環境により手動でコピーしてください。"
+    )
+    // 最後の手段（ユーザーが手でコピーできるようにする）
+    try {
+      window.prompt(
+        "会話ID（これをコピーしてアンケートに貼り付けてください）",
+        conversationId
+      )
+    } catch {
+      // ignore
+    }
+  }
 
   function scrollToMainEnd(behavior: ScrollBehavior = "smooth") {
     // ScrollArea内に効かせるため、要素へscrollIntoViewする
@@ -653,7 +729,7 @@ export function AppShell() {
               </div>
 
               <ScrollArea className="flex-1 min-h-0">
-                <div className="space-y-1 pr-1">
+                <div className="space-y-1 pr-4">
                   {isLoadingConversations && (
                     <div className="text-muted-foreground px-2 py-2 text-xs">
                       読み込み中…
@@ -693,24 +769,44 @@ export function AppShell() {
                             {new Date(c.updatedAt).toLocaleString()}
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void deleteConversation(c.id)
-                          }}
-                          aria-label="セッションを削除"
-                          disabled={deletingConversationIds.has(c.id)}
-                        >
-                          {deletingConversationIds.has(c.id) ? (
-                            <Loader2Icon className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2Icon className="h-4 w-4" />
-                          )}
-                        </Button>
+                        <div className="shrink-0 flex items-center gap-0.5 mr-1">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void handleCopyConversationId(c.id)
+                            }}
+                            aria-label="会話IDをコピー"
+                            title="会話IDをコピー"
+                          >
+                            {copiedConversationId === c.id ? (
+                              <CheckIcon className="h-4 w-4" />
+                            ) : (
+                              <CopyIcon className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void deleteConversation(c.id)
+                            }}
+                            aria-label="セッションを削除"
+                            disabled={deletingConversationIds.has(c.id)}
+                          >
+                            {deletingConversationIds.has(c.id) ? (
+                              <Loader2Icon className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2Icon className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -773,7 +869,7 @@ export function AppShell() {
           </div>
 
           <ScrollArea className="flex-1 min-h-0">
-            <div className="space-y-1 pr-1">
+            <div className="w-[250px] space-y-1 pr-4">
               {isLoadingConversations && (
                 <div className="text-muted-foreground px-2 py-2 text-xs">
                   読み込み中…
@@ -783,7 +879,7 @@ export function AppShell() {
                 <div
                   key={c.id}
                   className={[
-                    "w-full rounded-md px-2 py-2 text-left text-sm cursor-pointer select-none",
+                    "rounded-md px-2 py-2 text-left text-sm cursor-pointer select-none",
                     selectedConversationId === c.id
                       ? "bg-muted"
                       : "hover:bg-muted/50",
@@ -811,24 +907,44 @@ export function AppShell() {
                         {new Date(c.updatedAt).toLocaleString()}
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void deleteConversation(c.id)
-                      }}
-                      aria-label="セッションを削除"
-                      disabled={deletingConversationIds.has(c.id)}
-                    >
-                      {deletingConversationIds.has(c.id) ? (
-                        <Loader2Icon className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2Icon className="h-4 w-4" />
-                      )}
-                    </Button>
+                    <div className="shrink-0 flex items-center gap-0.5 mr-1">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleCopyConversationId(c.id)
+                        }}
+                        aria-label="会話IDをコピー"
+                        title="会話IDをコピー"
+                      >
+                        {copiedConversationId === c.id ? (
+                          <CheckIcon className="h-4 w-4" />
+                        ) : (
+                          <CopyIcon className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void deleteConversation(c.id)
+                        }}
+                        aria-label="セッションを削除"
+                        disabled={deletingConversationIds.has(c.id)}
+                      >
+                        {deletingConversationIds.has(c.id) ? (
+                          <Loader2Icon className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2Icon className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
